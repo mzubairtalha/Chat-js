@@ -1,0 +1,361 @@
+For emoji.   
+
+
+// Emoji Picker Container
+var emojiPickerContainer = document.createElement('div');
+emojiPickerContainer.id = 'emoji-picker-container';
+emojiPickerContainer.style.display = 'none';
+emojiPickerContainer.style.position = 'absolute';
+emojiPickerContainer.style.background = '#fff';
+emojiPickerContainer.style.border = '1px solid #ccc';
+emojiPickerContainer.style.padding = '0px';
+emojiPickerContainer.style.whiteSpace = 'nowrap';  // Ensure emojis are in a single line
+document.body.appendChild(emojiPickerContainer);
+
+var emojiList = ['😂', '❤', '🙏', '🥰', '👍', '😡'];
+
+// Focus border effect
+function addFocusEffect(element) {
+  element.style.outline = '2px solid yellow';
+}
+
+function removeFocusEffect(element) {
+  element.style.outline = 'none';
+}
+
+// Emoji Picker Function
+function createEmojiPicker(messageElement, messageKey) {
+  emojiPickerContainer.innerHTML = ''; // Clear picker
+  emojiList.forEach(function (emoji, index) {
+    var emojiButton = document.createElement('button');
+    emojiButton.textContent = emoji;
+      emojiButton.style.border = 'none';
+    emojiButton.style.fontSize = '14px';  // Smaller font size
+    emojiButton.style.padding = '3px';  // Reduce padding to make the button smaller
+    emojiButton.style.margin = '2px';  // Reduce margin between buttons
+    emojiButton.style.cursor = 'pointer';
+    emojiButton.style.height = '28px';  // Set a fixed height for the button
+    emojiButton.style.width = '28px';   // Set a fixed width for the button
+
+    // Focus effect for emoji button
+    emojiButton.addEventListener('focus', function () {
+      addFocusEffect(emojiButton);
+    });
+
+    emojiButton.addEventListener('blur', function () {
+      removeFocusEffect(emojiButton);
+    });
+
+    emojiButton.onclick = function () {
+      addEmojiReaction(messageKey, emoji);
+      emojiPickerContainer.style.display = 'none'; // Hide picker
+
+      // Focus the Send button after emoji selection
+      focusSendButton();
+    };
+
+    // Focus emoji navigation (Arrow keys)
+    emojiButton.setAttribute('data-index', index);
+    emojiButton.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        const nextEmoji = emojiPickerContainer.querySelector(`button[data-index="${index + 1}"]`);
+        if (nextEmoji) nextEmoji.focus();
+        e.preventDefault();
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        const prevEmoji = emojiPickerContainer.querySelector(`button[data-index="${index - 1}"]`);
+        if (prevEmoji) prevEmoji.focus();
+        e.preventDefault();
+      }
+    });
+
+    emojiPickerContainer.appendChild(emojiButton);
+  });
+
+  // Position picker
+  var rect = messageElement.getBoundingClientRect();
+  emojiPickerContainer.style.left = rect.left + 'px';
+  emojiPickerContainer.style.top = rect.bottom + window.scrollY + 'px';
+  emojiPickerContainer.style.display = 'block';
+
+  // Focus the first emoji
+  const firstEmoji = emojiPickerContainer.querySelector('button');
+  if (firstEmoji) {
+    firstEmoji.focus();
+  }
+}
+
+// Add Emoji Reaction
+function addEmojiReaction(messageKey, emoji) {
+  var roomRef = database.ref('chats/' + currentRoom + '/' + messageKey + '/reactions');
+  roomRef.transaction(function (reactions) {
+    reactions = reactions || {};
+    reactions[userName] = emoji;
+    return reactions;
+  });
+}
+
+// Display Message
+function displayMessage(message, messageKey) {
+  var messageElement = document.createElement('p');
+  messageElement.textContent = (message.userName || 'Anonymous') + ': ' + message.text;
+
+  // Make the message element focusable
+  messageElement.tabIndex = 0;  // Add tabindex="0" to make it focusable
+
+  // Add focus event for message element
+  messageElement.addEventListener('focus', function () {
+    addFocusEffect(messageElement);
+  });
+
+  // Add blur event for message element
+  messageElement.addEventListener('blur', function () {
+    removeFocusEffect(messageElement);
+  });
+
+  // Add reaction area
+  var reactionsElement = document.createElement('div');
+  reactionsElement.style.marginTop = '5px';
+  messageElement.appendChild(reactionsElement);
+
+  // Update reactions
+  database.ref('chats/' + currentRoom + '/' + messageKey + '/reactions').on('value', function (snapshot) {
+    var reactions = snapshot.val() || {};
+    reactionsElement.textContent = '';
+    for (var user in reactions) {
+      var reaction = document.createElement('span');
+      reaction.textContent = reactions[user] + ' (' + user + ')';
+      reactionsElement.appendChild(reaction);
+    }
+  });
+
+  // Show picker on click or enter
+  messageElement.onclick = function () {
+    createEmojiPicker(messageElement, messageKey);
+  };
+
+  messageElement.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      createEmojiPicker(messageElement, messageKey);
+      e.preventDefault();
+    }
+  });
+
+  // Append message to chat box
+  chatBox.appendChild(messageElement);
+
+  // Scroll to the bottom after adding a new message
+  scrollToBottom();
+}
+
+// Function to scroll the chat box to the bottom
+function scrollToBottom() {
+  var chatBox = document.getElementById('chat-box');
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+// Function to focus the send button
+function focusSendButton() {
+  var sendButton = document.getElementById('send-btn');
+  sendButton.focus();
+}
+
+// Load Messages
+function loadMessages() {
+  var roomRef = database.ref('chats/' + currentRoom).limitToLast(10);
+  roomRef.on('child_added', function (snapshot) {
+    var messageKey = snapshot.key;
+    var message = snapshot.val();
+    displayMessage(message, messageKey);
+  });
+}
+
+// Function to focus the last message
+function focusLastMessage() {
+  var messages = document.querySelectorAll('#chat-box p');
+  if (messages.length > 0) {
+    messages[messages.length - 1].focus(); // Focus the last message
+  }
+}
+
+// Keyboard navigation and scroll event listeners
+document.addEventListener('keydown', (e) => {
+  const joinCodeInputFocused = document.activeElement === joinCodeInput;
+
+  if (joinCodeInputFocused) {
+    // Handle numeric input in joinCodeInput field
+    if (e.key >= '0' && e.key <= '9') {
+      // Allow only numeric input
+      e.preventDefault();
+      joinCodeInput.value += e.key;
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      // Enable navigation even when joinCodeInput is focused
+      const move = e.key === 'ArrowDown' ? 1 : -1;
+      nav(move);
+      e.preventDefault();
+    }
+  } else {
+    // Handle scrolling and navigation when joinCodeInput is not focused
+    if (e.key === '2') {
+      scrollChatbox('up'); // Scroll up when key '2' is pressed
+      e.preventDefault();
+    } else if (e.key === '8') {
+      scrollChatbox('down'); // Scroll down when key '8' is pressed
+      e.preventDefault();
+    } else if (e.key === 'ArrowDown') {
+      // Navigate through messages (down arrow)
+      const nextMessage = document.querySelector('#chat-box p:focus');
+      if (nextMessage) {
+        const nextElement = nextMessage.nextElementSibling;
+        if (nextElement) nextElement.focus();
+      }
+      e.preventDefault();
+    } else if (e.key === 'ArrowUp') {
+      // Navigate through messages (up arrow)
+      const prevMessage = document.querySelector('#chat-box p:focus');
+      if (prevMessage) {
+        const prevElement = prevMessage.previousElementSibling;
+        if (prevElement) prevElement.focus();
+      }
+      e.preventDefault();
+    } else if (e.key === '5') {
+      // Focus last message if '5' is pressed
+      var messages = document.querySelectorAll('#chat-box p');
+      if (messages.length > 0) {
+        if (document.activeElement === messages[messages.length - 1]) {
+          // If already focused on last message, focus on send button
+          focusSendButton();
+        } else {
+          // Otherwise, focus on last message
+          focusLastMessage();
+        }
+      }
+      e.preventDefault();
+    }
+  }
+});
+
+
+
+
+
+
+
+
+
+For image .    
+
+
+// ImageBB API Key
+const imageBBApiKey = 'ecd36672d25100ceeeba339b2a3621c2';
+
+// Create an overlay for upload progress
+const overlay = document.createElement('div');
+overlay.style.position = 'fixed';
+overlay.style.top = '0';
+overlay.style.left = '0';
+overlay.style.width = '100%';
+overlay.style.height = '100%';
+overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+overlay.style.color = 'white';
+overlay.style.display = 'flex';
+overlay.style.alignItems = 'center';
+overlay.style.justifyContent = 'center';
+overlay.style.fontSize = '20px';
+overlay.style.zIndex = '1000';
+overlay.style.display = 'none';
+document.body.appendChild(overlay);
+
+document.getElementById('image-input-btn').addEventListener('click', () => {
+  document.getElementById('image-input').click();
+});
+
+document.getElementById('image-input').addEventListener('change', (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  // Convert the file to Base64 for ImageBB API
+  const reader = new FileReader();
+  reader.readAsDataURL(file);
+  reader.onload = () => {
+    const base64Image = reader.result.split(',')[1];
+    
+    // Use XMLHttpRequest for API request
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `https://api.imgbb.com/1/upload?key=${imageBBApiKey}`, true);
+    xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+
+    // Show overlay and initialize progress text
+    overlay.style.display = 'flex';
+    overlay.textContent = 'Uploading Image... 0%';
+
+    // Update overlay text with upload progress
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const percentComplete = Math.round((event.loaded / event.total) * 100);
+        overlay.textContent = `Uploading Image... ${percentComplete}%`;
+      }
+    };
+
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState === 4) {
+        overlay.style.display = 'none'; // Hide overlay when upload is complete
+
+        if (xhr.status === 200) {
+          const response = JSON.parse(xhr.responseText);
+          if (response.success) {
+            const imageUrl = response.data.url;
+
+            // Optional: Send the image URL to Firebase
+            const message = {
+              imageURL: imageUrl, // Store the image URL in the message
+              timestamp: new Date().toISOString(),
+              userName: userName,
+              userColor: userColor
+            };
+
+            // Send the message to Firebase (or another chat database)
+            database.ref(`chats/${currentRoom}`).push(message);
+
+            // Display the image in the chat only for other users
+            if (!isCurrentUser) {
+              displayMessage(message);
+            }
+          } else {
+            alert("Image upload failed. Please try again.");
+          }
+        } else {
+          alert("Image upload failed. Please check your network connection.");
+        }
+      }
+    };
+
+    // Send base64 image data in the required format
+    xhr.send(`image=${encodeURIComponent(base64Image)}`);
+  };
+});
+
+// Function to display messages, including images, in the chat
+function displayMessage(message) {
+  const messageElement = document.createElement('p');
+
+  const nameSpan = document.createElement('span');
+  nameSpan.textContent = `${message.userName || ''}: `;
+  nameSpan.style.color = message.userColor;
+  nameSpan.style.fontWeight = 'bold';
+  messageElement.appendChild(nameSpan);
+
+  // Check if the message contains an image URL
+  if (message.imageURL) {
+    const imageElement = document.createElement('img');
+    imageElement.src = message.imageURL; // Set image source to the URL from ImageBB
+    imageElement.style.maxWidth = '100px'; // Adjust image size if necessary
+    messageElement.appendChild(imageElement);
+  } else {
+    messageElement.appendChild(document.createTextNode(message.text));
+  }
+
+  chatBox.appendChild(messageElement); // Add the message to the chat box
+  chatBox.scrollTop = chatBox.scrollHeight; // Scroll to the bottom of the chat
+}
+
