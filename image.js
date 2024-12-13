@@ -1,5 +1,5 @@
 // ImageBB API Key
-const imageBBApiKey = '65f269399bbac0cf4fa69d8f4a0345d5';
+const imageBBApiKey = '42d270ce0feaa7863db65e5ecceaf03c';
 
 // Create an overlay for upload progress
 const overlay = document.createElement('div');
